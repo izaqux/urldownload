@@ -13,6 +13,7 @@ from urllib.parse import urljoin, urlparse, unquote
 from textwrap import wrap
 import argparse
 import tempfile
+import time
 
 # Config de exibição
 MAXLINEWIDTH = 70
@@ -57,13 +58,25 @@ def SafeDownloadFile(url, savePath):
 		#se já existe arq
 		rsmBytePos = os.path.getsize(tempPath) if os.path.exists(tempPath) else 0
 
-		headers = {}
+		headers = {
+			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+		}
 		if rsmBytePos > 0:
 			print(f"↻ Retomando download interrompido: {rsmBytePos/1024/1024:.1f} MB")
 			headers['Range'] = f'bytes={rsmBytePos}-'
 
-		rsp = requests.get(url, stream=True, timeout=30, headers=headers)
-		rsp.raise_for_status()
+		maxTimeOut = 3
+
+		for attempt in range(maxTimeOut):
+			try:
+				rsp = requests.get(url, stream=True, timeout=120, headers=headers)
+				rsp.raise_for_status()
+				break
+			except requests.exceptionsTimeout:
+				if attempt == (maxTimeOut - 1):
+					raise
+				print(f"⌛ Timeout, tentando novamente ({attempt + 1}/{maxTimeOut})...")
+				time.sleep(5)
 
 		tSize = int(rsp.headers.get('content-length', 0)) + rsmBytePos
 		download = rsmBytePos
@@ -117,9 +130,19 @@ def getAllFiles(url, extensions=None):
 		headers = {
 			'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 		}
-		rsp = requests.get(url, headers=headers, timeout=30)
-		rsp.raise_for_status()
-		
+		maxTimeOut = 3
+
+		for attempt in range(maxTimeOut):
+			try:
+				rsp = requests.get(url, stream=True, timeout=120, headers=headers)
+				rsp.raise_for_status()
+				break
+			except requests.exceptionsTimeout:
+				if attempt == (maxTimeOut - 1):
+					raise
+				print(f"⌛ Timeout, tentando novamente ({attempt + 1}/{maxTimeOut})...")
+				time.sleep(5)
+
 		soup = BeautifulSoup(rsp.text, 'html.parser')
 		files = []
 
@@ -132,7 +155,7 @@ def getAllFiles(url, extensions=None):
 
 			if '.' in fileName:
 				ext = fileName.split('.')[-1].lower()
-				if extensions is None or ext in entensions:
+				if extensions is None or ext in extensions:
 					files.append(fullUrl)
 
 		return list(set(files)) # Rmv urls duplicadas
